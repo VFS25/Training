@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Certificate Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --ink: #1f2433; --muted: #6b7185; --line: #e3e6ef;
+    --accent: #5b5bd6; --accent-ink: #ffffff; --accent-soft: #ecebfd; --ok: #1f9d6b; --err: #c8384b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: 'Quicksand', system-ui, sans-serif; font-weight: 500; font-size: 15px; line-height: 1.45; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 32px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 24px; font-weight: 700; margin: 0; }
+  .sub { color: var(--muted); margin: 2px 0 0; }
+  #popout { display: none; font-weight: 600; color: var(--accent); text-decoration: none; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .card + .card { margin-top: 12px; }
+  .card h2 { font-size: 15px; font-weight: 700; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  .num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700; }
+  .drop { display: block; border: 2px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; cursor: pointer; color: var(--muted); transition: border-color .15s, background .15s; }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop input { display: none; }
+  .drop .fname { color: var(--ink); font-weight: 700; word-break: break-all; }
+  label.f { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin: 10px 0 4px; }
+  select, input[type=number], input[type=text] { width: 100%; font: inherit; font-weight: 600; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+  input[type=color] { width: 100%; height: 36px; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: #fff; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .fields { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+  .chip { font: inherit; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .chip.add { border-style: dashed; color: var(--accent); }
+  .btn { font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; background: var(--accent); color: var(--accent-ink); width: 100%; }
+  .btn.ghost { background: var(--accent-soft); color: var(--accent); }
+  .btn.link { background: none; color: var(--err); padding: 4px 0; width: auto; font-size: 13px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btns { display: grid; gap: 8px; margin-top: 12px; }
+  .hint { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+  .stage { position: relative; }
+  .stage-inner { position: relative; border-radius: 10px; overflow: hidden; background: repeating-conic-gradient(#eef0f5 0 25%, #f7f8fb 0 50%) 0 0/20px 20px; min-height: 300px; display: grid; place-items: center; }
+  #canvas { display: block; max-width: 100%; height: auto; cursor: crosshair; touch-action: none; box-shadow: 0 2px 14px rgba(20,24,40,.12); }
+  .empty { color: var(--muted); padding: 60px 20px; text-align: center; }
+  .nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .nav .ctl { display: flex; gap: 6px; align-items: center; }
+  .nav button { font: inherit; font-weight: 700; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+  .status { font-size: 13px; font-weight: 600; min-height: 1.2em; margin-top: 10px; }
+  .status.ok { color: var(--ok); } .status.err { color: var(--err); }
+  progress { width: 100%; height: 8px; margin-top: 8px; display: none; accent-color: var(--accent); }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Certificate Generator</h1>
+      <p class="sub">Upload a blank certificate and a name list, then place the name and download every certificate.</p>
+    </div>
+    <a id="popout" href="#" target="_blank" rel="noopener">Open full page ↗</a>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2><span class="num">1</span>Certificate template (PDF)</h2>
+        <label class="drop" id="pdfDrop">
+          <input type="file" id="pdfInput" accept="application/pdf,.pdf">
+          <span id="pdfLabel">Drop your blank certificate PDF here or <u>browse</u></span>
+        </label>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">2</span>Name list (CSV or Excel)</h2>
+        <label class="drop" id="dataDrop">
+          <input type="file" id="dataInput" accept=".csv,.xlsx,.xls,.ods,text/csv">
+          <span id="dataLabel">Drop a .csv or .xlsx file here or <u>browse</u></span>
+        </label>
+        <p class="hint">The first row should be a header, like <b>Name</b>. One column of names is all you need.</p>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">3</span>Text placement</h2>
+        <div class="fields" id="fieldChips"></div>
+        <p class="hint" style="margin-top:4px">Click or drag on the preview to position the selected text. The dashed line is where the text sits.</p>
+
+        <label class="f" for="fColumn">Text comes from</label>
+        <select id="fColumn"></select>
+        <div id="fTextWrap">
+          <label class="f" for="fText">Text to print on every certificate</label>
+          <input type="text" id="fText" placeholder="e.g. September 28, 2026">
+        </div>
+
+        <div class="row">
+          <div>
+            <label class="f" for="fSize">Font size (pt)</label>
+            <input type="number" id="fSize" min="4" max="300" step="1">
+          </div>
+          <div>
+            <label class="f" for="fWeight">Weight</label>
+            <select id="fWeight">
+              <option value="300">Light</option>
+              <option value="400">Regular</option>
+              <option value="500">Medium</option>
+              <option value="600">Semibold</option>
+              <option value="700">Bold</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label class="f" for="fColor">Color</label>
+            <input type="color" id="fColor">
+          </div>
+          <div>
+            <label class="f" for="fAlign">Align</label>
+            <select id="fAlign">
+              <option value="center">Center</option>
+              <option value="left">Left</option>
+              <option value="right">Right</option>
+            </select>
+          </div>
+        </div>
+        <label class="f" for="fMaxW">Max width before shrinking (% of page)</label>
+        <input type="number" id="fMaxW" min="5" max="100" step="1">
+        <label class="f" for="fCase">Text case</label>
+        <select id="fCase">
+          <option value="asis">As written</option>
+          <option value="title">Title Case</option>
+          <option value="upper">UPPERCASE</option>
+        </select>
+        <button class="btn link" id="removeField" type="button">Remove this text field</button>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">4</span>Generate</h2>
+        <label class="f" for="fileCol">Name each PDF using</label>
+        <select id="fileCol"></select>
+        <div class="btns">
+          <button class="btn" id="genMerged" type="button" disabled>Download one combined PDF</button>
+          <button class="btn ghost" id="genZip" type="button" disabled>Download ZIP of individual PDFs</button>
+        </div>
+        <progress id="prog" max="100" value="0"></progress>
+        <div class="status" id="status"></div>
+      </div>
+    </div>
+
+    <div class="card stage">
+      <div class="stage-inner" id="stageInner">
+        <div class="empty" id="emptyMsg">Your certificate preview will appear here.</div>
+        <canvas id="canvas" hidden></canvas>
+      </div>
+      <div class="nav" id="nav" hidden>
+        <div class="ctl">
+          <button type="button" id="prevRow" aria-label="Previous">‹</button>
+          <span id="rowInfo">Sample</span>
+          <button type="button" id="nextRow" aria-label="Next">›</button>
+        </div>
+        <span class="hint" style="margin:0" id="pageInfo"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const { PDFDocument, rgb } = PDFLib;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  // Quicksand font files (Latin + Latin Extended), embedded into each PDF.
+  const FONT_BASE = 'https://cdn.jsdelivr.net/npm/@fontsource/quicksand@5.3.0/files/';
+  const fontUrl = (subset, w) => `${FONT_BASE}quicksand-${subset}-${w}-normal.woff`;
+  const fontCache = {};
+  function getFontBytes(subset, w) {
+    const key = subset + w;
+    if (!fontCache[key]) fontCache[key] = fetch(fontUrl(subset, w)).then(r => {
+      if (!r.ok) throw new Error('Could not load the Quicksand font.');
+      return r.arrayBuffer();
+    });
+    return fontCache[key];
+  }
+  const RANGES = {
+    'latin': 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD',
+    'latin-ext': 'U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF',
+  };
+  // Preview uses the exact same font files so sizes match the PDF.
+  const cssFontReady = {};
+  function loadCssFont(w) {
+    if (!cssFontReady[w]) {
+      cssFontReady[w] = Promise.all(['latin', 'latin-ext'].map(async s => {
+        const face = new FontFace('QuicksandCert', `url(${fontUrl(s, w)})`, { weight: String(w), unicodeRange: RANGES[s] });
+        await face.load(); document.fonts.add(face);
+      })).catch(() => {});
+    }
+    return cssFontReady[w];
+  }
+  // The Latin file covers English + Western European names; the Latin Extended file covers
+  // letters like Ł, ś, ğ, ő. Text is split into runs so each character uses the file that has it.
+  const fkCache = {};
+  async function splitRuns(text, w) {
+    const key = 'latin' + w;
+    if (!fkCache[key]) fkCache[key] = fontkit.create(new Uint8Array(await getFontBytes('latin', w)));
+    const fk = fkCache[key]; const runs = [];
+    for (const ch of text) {
+      const subset = (ch.trim() === '' || fk.hasGlyphForCodePoint(ch.codePointAt(0))) ? 'latin' : 'latin-ext';
+      const last = runs[runs.length - 1];
+      if (last && last.subset === subset) last.text += ch; else runs.push({ subset, text: ch });
+    }
+    return runs;
+  }
+
+  // ---------- State ----------
+  const $ = id => document.getElementById(id);
+  const state = {
+    pdfBytes: null, pdfName: '', page: null, pageW: 0, pageH: 0, offX: 0, offY: 0, pageCount: 0,
+    rows: [], columns: [], rowIdx: 0,
+    fields: [], sel: 0, fileCol: '',
+    renderScale: 1, bgImage: null,
+  };
+  const CUSTOM = '__custom__'; // field prints the same typed text on every certificate
+  const isCustom = f => f.column === CUSTOM;
+  const newField = (column, yFrac, text = '') => ({ column, text, x: 0.5, y: yFrac, size: 36, weight: 600, color: '#2b2d42', align: 'center', maxW: 70, textCase: 'asis' });
+
+  const SETTINGS_KEY = 'certgen-settings-v1';
+  function saveSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ fields: state.fields, fileCol: state.fileCol })); } catch (e) {}
+  }
+  function loadSettings() {
+    try { const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); if (s && Array.isArray(s.fields) && s.fields.length) return s; } catch (e) {}
+    return null;
+  }
+  const saved = loadSettings();
+  state.fields = saved ? saved.fields : [newField('', 0.5)];
+  state.fileCol = saved ? saved.fileCol : '';
+
+  // ---------- Helpers ----------
+  function setStatus(msg, kind) { const s = $('status'); s.textContent = msg || ''; s.className = 'status' + (kind ? ' ' + kind : ''); }
+  function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255); }
+  function titleCase(s) { return s.toLowerCase().replace(/(^|[\s\-'’.])(\p{L})/gu, (m, a, b) => a + b.toUpperCase()); }
+  function fieldText(f, row) {
+    let v = isCustom(f) ? f.text : (row ? row[f.column] : '');
+    if (v == null) v = '';
+    if (v instanceof Date) v = v.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    v = String(v).replace(/\s+/g, ' ').trim();
+    if (f.textCase === 'upper') v = v.toUpperCase();
+    else if (f.textCase === 'title') v = titleCase(v);
+    return v;
+  }
+  function sampleRow() {
+    if (state.rows.length) return state.rows[state.rowIdx];
+    const r = {}; state.fields.forEach(f => { if (!isCustom(f)) r[f.column] = f.column ? `[${f.column}]` : 'Jane Doe'; }); return r;
+  }
+  function safeFileName(s) { return (s || 'certificate').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 100) || 'certificate'; }
+  function download(blob, name) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  }
+  function updateButtons() {
+    const ready = state.pdfBytes && state.rows.length && state.fields.every(f => f.column);
+    $('genMerged').disabled = !ready; $('genZip').disabled = !ready;
+  }
+
+  // ---------- Drop zones ----------
+  function wireDrop(zoneId, inputId, handler) {
+    const z = $(zoneId), inp = $(inputId);
+    inp.addEventListener('change', () => inp.files[0] && handler(inp.files[0]));
+    ['dragenter', 'dragover'].forEach(e => z.addEventListener(e, ev => { ev.preventDefault(); z.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach(e => z.addEventListener(e, ev => { ev.preventDefault(); z.classList.remove('over'); }));
+    z.addEventListener('drop', ev => { const f = ev.dataTransfer.files[0]; if (f) handler(f); });
+  }
+
+  // ---------- PDF template ----------
+  async function loadPdf(file) {
+    setStatus('');
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+      const page = await doc.getPage(1);
+      // Page geometry from pdf-lib (what we'll draw on)
+      const lib = await PDFDocument.load(bytes, { ignoreEncryption: true });
+      const p0 = lib.getPage(0);
+      const box = p0.getCropBox();
+      state.pdfBytes = bytes; state.pdfName = file.name; state.page = page; state.pageCount = doc.numPages;
+      state.pageW = box.width; state.pageH = box.height; state.offX = box.x; state.offY = box.y;
+      state.rotation = p0.getRotation().angle % 360;
+      $('pdfLabel').innerHTML = `<span class="fname">${escapeHtml(file.name)}</span><br>Click to replace`;
+      $('pageInfo').textContent = `${Math.round(box.width)} × ${Math.round(box.height)} pt` + (doc.numPages > 1 ? ` · using page 1 of ${doc.numPages}` : '');
+      await renderBackground();
+      if (state.rotation) setStatus('Heads up: this PDF page is rotated, so text placement may be off. Re-exporting it without rotation fixes that.', 'err');
+    } catch (e) {
+      console.error(e); setStatus('That PDF could not be opened. Is it password-protected?', 'err');
+    }
+    updateButtons();
+  }
+  function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  async function renderBackground() {
+    const page = state.page; if (!page) return;
+    const base = page.getViewport({ scale: 1 });
+    const scale = Math.min(3, Math.max(1, 1400 / base.width));
+    const vp = page.getViewport({ scale });
+    const off = document.createElement('canvas'); off.width = Math.round(vp.width); off.height = Math.round(vp.height);
+    await page.render({ canvasContext: off.getContext('2d'), viewport: vp }).promise;
+    state.bgImage = off; state.renderScale = off.width / state.pageW;
+    const c = $('canvas'); c.width = off.width; c.height = off.height; c.hidden = false;
+    $('emptyMsg').hidden = true; $('nav').hidden = false;
+    draw();
+  }
+
+  // ---------- Data ----------
+  async function loadData(file) {
+    setStatus('');
+    try {
+      const buf = await file.arrayBuffer();
+      const isCsv = /\.csv$/i.test(file.name) || file.type === 'text/csv';
+      const wb = isCsv ? XLSX.read(new TextDecoder('utf-8').decode(buf), { type: 'string', raw: true })
+                       : XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      // raw:false keeps dates and numbers exactly as they appear in the spreadsheet
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+      const cleaned = rows.filter(r => Object.values(r).some(v => String(v).trim() !== ''));
+      if (!cleaned.length) throw new Error('No rows found.');
+      const cols = []; cleaned.forEach(r => Object.keys(r).forEach(k => { if (!cols.includes(k) && !/^__EMPTY/.test(k)) cols.push(k); }));
+      state.rows = cleaned; state.columns = cols; state.rowIdx = 0;
+      // Auto-pick a name column
+      const guess = cols.find(c => /^(full\s*)?name$/i.test(c.trim())) || cols.find(c => /name/i.test(c)) || cols[0];
+      let first = true;
+      state.fields.forEach(f => {
+        if (isCustom(f)) return;
+        if (!cols.includes(f.column)) f.column = first ? guess : (cols.find(c => !state.fields.some(g => g.column === c)) || guess);
+        first = false;
+      });
+      if (!cols.includes(state.fileCol)) state.fileCol = guess;
+      $('dataLabel').innerHTML = `<span class="fname">${escapeHtml(file.name)}</span><br>${cleaned.length} ${cleaned.length === 1 ? 'row' : 'rows'} · click to replace`;
+      refreshControls(); draw(); saveSettings();
+    } catch (e) {
+      console.error(e); setStatus('That file could not be read. Make sure it is a .csv or .xlsx with a header row.', 'err');
+    }
+    updateButtons();
+  }
+
+  // ---------- Controls ----------
+  function chipLabel(f, i) {
+    if (!isCustom(f)) return f.column || `Text ${i + 1}`;
+    const t = (f.text || '').trim();
+    return t ? (t.length > 18 ? t.slice(0, 17) + '…' : t) : 'Typed text';
+  }
+  function refreshControls() {
+    const chips = $('fieldChips'); chips.innerHTML = '';
+    state.fields.forEach((f, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'chip' + (i === state.sel ? ' on' : '');
+      b.textContent = chipLabel(f, i); b.onclick = () => { state.sel = i; refreshControls(); draw(); };
+      chips.appendChild(b);
+    });
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'chip add'; add.textContent = '+ Add text';
+    add.onclick = () => {
+      const nf = newField(CUSTOM, Math.min(0.9, (state.fields[state.fields.length - 1]?.y || 0.5) + 0.1));
+      nf.size = 18; nf.weight = 500; state.fields.push(nf); state.sel = state.fields.length - 1;
+      refreshControls(); draw(); saveSettings(); updateButtons();
+      $('fText').focus();
+    };
+    chips.appendChild(add);
+
+    const f = state.fields[state.sel];
+    const colSel = $('fColumn'); colSel.innerHTML = '';
+    colSel.add(new Option('Typed text (same on all)', CUSTOM));
+    if (state.columns.length) {
+      const grp = document.createElement('optgroup'); grp.label = 'From your name list';
+      state.columns.forEach(c => grp.appendChild(new Option(c, c))); colSel.add(grp);
+    } else if (!isCustom(f)) {
+      colSel.add(new Option('Name list column (upload list)', f.column));
+    }
+    colSel.value = f.column;
+    $('fTextWrap').hidden = !isCustom(f);
+    if ($('fText').value !== f.text) $('fText').value = f.text || '';
+    $('fSize').value = f.size; $('fWeight').value = f.weight; $('fColor').value = f.color;
+    $('fAlign').value = f.align; $('fMaxW').value = f.maxW; $('fCase').value = f.textCase;
+    $('removeField').style.display = state.fields.length > 1 ? '' : 'none';
+
+    const fc = $('fileCol'); fc.innerHTML = '';
+    if (!state.columns.length) { fc.add(new Option('Upload a name list first', '')); fc.disabled = true; }
+    else { fc.disabled = false; state.columns.forEach(c => fc.add(new Option(c, c))); fc.value = state.fileCol; }
+
+    $('rowInfo').textContent = state.rows.length ? `${state.rowIdx + 1} of ${state.rows.length}` : 'Sample';
+    loadCssFont(f.weight).then(draw);
+  }
+  function bindField(id, key, parse) {
+    $(id).addEventListener('input', () => {
+      const v = parse ? parse($(id).value) : $(id).value;
+      if (parse && (v === null || Number.isNaN(v))) return;
+      state.fields[state.sel][key] = v;
+      if (key === 'column') refreshControls();
+      if (key === 'weight') loadCssFont(v).then(draw);
+      draw(); saveSettings(); updateButtons();
+    });
+  }
+  bindField('fColumn', 'column');
+  $('fText').addEventListener('input', () => {
+    const f = state.fields[state.sel]; f.text = $('fText').value;
+    const chip = $('fieldChips').children[state.sel]; if (chip) chip.textContent = chipLabel(f, state.sel);
+    draw(); saveSettings();
+  });
+  bindField('fSize', 'size', v => { const n = parseFloat(v); return n >= 1 ? n : null; });
+  bindField('fWeight', 'weight', v => parseInt(v, 10));
+  bindField('fColor', 'color');
+  bindField('fAlign', 'align');
+  bindField('fMaxW', 'maxW', v => { const n = parseFloat(v); return n > 0 ? Math.min(100, n) : null; });
+  bindField('fCase', 'textCase');
+  $('fileCol').addEventListener('change', () => { state.fileCol = $('fileCol').value; saveSettings(); });
+  $('removeField').onclick = () => {
+    if (state.fields.length < 2) return;
+    state.fields.splice(state.sel, 1); state.sel = Math.max(0, state.sel - 1);
+    refreshControls(); draw(); saveSettings(); updateButtons();
+  };
+  $('prevRow').onclick = () => { if (!state.rows.length) return; state.rowIdx = (state.rowIdx - 1 + state.rows.length) % state.rows.length; refreshControls(); draw(); };
+  $('nextRow').onclick = () => { if (!state.rows.length) return; state.rowIdx = (state.rowIdx + 1) % state.rows.length; refreshControls(); draw(); };
+
+  // ---------- Preview ----------
+  // Shared layout math: returns font size after auto-shrink, given a width measurer (in pt at size 1).
+  function fitSize(f, widthAt1) {
+    const maxW = state.pageW * f.maxW / 100;
+    return widthAt1 * f.size > maxW && widthAt1 > 0 ? maxW / widthAt1 : f.size;
+  }
+  function draw() {
+    const c = $('canvas'); if (!state.bgImage) return;
+    const ctx = c.getContext('2d'); const s = state.renderScale;
+    ctx.clearRect(0, 0, c.width, c.height); ctx.drawImage(state.bgImage, 0, 0);
+    const row = sampleRow();
+    state.fields.forEach((f, i) => {
+      const text = fieldText(f, row) || (isCustom(f) ? 'Type your text' : f.column ? '' : 'Jane Doe');
+      const x = f.x * state.pageW * s, y = f.y * state.pageH * s;
+      ctx.font = `${f.weight} 100px QuicksandCert, Quicksand`;
+      const w1 = ctx.measureText(text).width / 100;
+      const size = fitSize(f, w1);
+      ctx.font = `${f.weight} ${size * s}px QuicksandCert, Quicksand`;
+      ctx.fillStyle = f.color; ctx.textBaseline = 'alphabetic'; ctx.textAlign = f.align;
+      ctx.fillText(text, x, y);
+      if (i === state.sel) {
+        const maxW = state.pageW * f.maxW / 100 * s;
+        const left = f.align === 'center' ? x - maxW / 2 : f.align === 'left' ? x : x - maxW;
+        ctx.save(); ctx.setLineDash([8 * s / 2, 6 * s / 2]); ctx.lineWidth = Math.max(1, s);
+        ctx.strokeStyle = 'rgba(91,91,214,.85)';
+        ctx.beginPath(); ctx.moveTo(left, y + 0.5); ctx.lineTo(left + maxW, y + 0.5); ctx.stroke();
+        ctx.setLineDash([]); ctx.fillStyle = 'rgba(91,91,214,.95)';
+        ctx.beginPath(); ctx.arc(x, y, 4 * Math.max(1, s / 1.5), 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    });
+  }
+  // Click / drag to position
+  (() => {
+    const c = $('canvas'); let dragging = false;
+    function pos(ev) {
+      const r = c.getBoundingClientRect();
+      return { x: Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)) };
+    }
+    c.addEventListener('pointerdown', ev => {
+      const p = pos(ev);
+      // If clicking near another field's anchor, select it instead
+      const near = state.fields.findIndex((f, i) => i !== state.sel && Math.abs(f.x - p.x) < 0.04 && Math.abs(f.y - p.y) < 0.03);
+      if (near >= 0) { state.sel = near; refreshControls(); }
+      else { const f = state.fields[state.sel]; f.x = p.x; f.y = p.y; }
+      dragging = true; c.setPointerCapture(ev.pointerId); draw();
+    });
+    c.addEventListener('pointermove', ev => { if (!dragging) return; const p = pos(ev); const f = state.fields[state.sel]; f.x = p.x; f.y = p.y; draw(); });
+    c.addEventListener('pointerup', () => { if (dragging) { dragging = false; saveSettings(); } });
+    // Arrow keys nudge the selected field
+    document.addEventListener('keydown', ev => {
+      if (!state.bgImage || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key]; if (!d) return;
+      ev.preventDefault(); const step = ev.shiftKey ? 10 : 1; const f = state.fields[state.sel];
+      f.x = Math.min(1, Math.max(0, f.x + d[0] * step / state.pageW)); f.y = Math.min(1, Math.max(0, f.y + d[1] * step / state.pageH));
+      draw(); saveSettings();
+    });
+  })();
+
+  // ---------- Generation ----------
+  async function prepareFonts(doc) {
+    doc.registerFontkit(fontkit);
+    const cache = {};
+    return async (w, subset) => {
+      const key = subset + w;
+      if (!cache[key]) cache[key] = getFontBytes(subset, w).then(b => doc.embedFont(b, { subset: true }));
+      return cache[key];
+    };
+  }
+  function drawFields(page, fontFor, row) {
+    return Promise.all(state.fields.map(async f => {
+      const text = fieldText(f, row); if (!text) return;
+      const runs = await splitRuns(text, f.weight);
+      for (const r of runs) { r.font = await fontFor(f.weight, r.subset); r.w1 = r.font.widthOfTextAtSize(r.text, 1); }
+      const w1 = runs.reduce((a, r) => a + r.w1, 0);
+      const size = fitSize(f, w1);
+      const w = w1 * size;
+      const ax = state.offX + f.x * state.pageW;
+      let x = f.align === 'center' ? ax - w / 2 : f.align === 'right' ? ax - w : ax;
+      const y = state.offY + (1 - f.y) * state.pageH;
+      for (const r of runs) {
+        page.drawText(r.text, { x, y, size, font: r.font, color: hexToRgb(f.color) });
+        x += r.w1 * size;
+      }
+    }));
+  }
+  function progress(i, n) { const p = $('prog'); p.style.display = 'block'; p.value = Math.round(i / n * 100); }
+  const tick = () => new Promise(r => setTimeout(r, 0));
+
+  async function withBusy(fn) {
+    $('genMerged').disabled = $('genZip').disabled = true;
+    try { await fn(); } catch (e) { console.error(e); setStatus('Something went wrong: ' + (e.message || e), 'err'); }
+    $('prog').style.display = 'none'; updateButtons();
+  }
+  function stamp() { return new Date().toISOString().slice(0, 10); }
+  const baseName = () => safeFileName(state.pdfName.replace(/\.pdf$/i, '')) || 'certificates';
+
+  $('genMerged').onclick = () => withBusy(async () => {
+    setStatus('Building certificates…');
+    const tpl = await PDFDocument.load(state.pdfBytes, { ignoreEncryption: true });
+    const out = await PDFDocument.create();
+    const fontFor = await prepareFonts(out);
+    const n = state.rows.length;
+    for (let i = 0; i < n; i++) {
+      const [pg] = await out.copyPages(tpl, [0]); out.addPage(pg);
+      await drawFields(pg, fontFor, state.rows[i]);
+      if (i % 10 === 0) { progress(i, n); await tick(); }
+    }
+    const bytes = await out.save();
+    download(new Blob([bytes], { type: 'application/pdf' }), `${baseName()}-all-${stamp()}.pdf`);
+    setStatus(`Done: ${n} certificates in one PDF.`, 'ok');
+  });
+
+  $('genZip').onclick = () => withBusy(async () => {
+    setStatus('Building certificates…');
+    const zip = new JSZip(); const used = {}; const n = state.rows.length;
+    for (let i = 0; i < n; i++) {
+      const doc = await PDFDocument.load(state.pdfBytes, { ignoreEncryption: true });
+      const keep = doc.getPageCount(); for (let k = keep - 1; k > 0; k--) doc.removePage(k);
+      const fontFor = await prepareFonts(doc);
+      await drawFields(doc.getPage(0), fontFor, state.rows[i]);
+      let name = safeFileName(String(state.rows[i][state.fileCol] ?? '') || `certificate-${i + 1}`);
+      const key = name.toLowerCase(); used[key] = (used[key] || 0) + 1; if (used[key] > 1) name += ` (${used[key]})`;
+      zip.file(name + '.pdf', await doc.save());
+      if (i % 5 === 0) { progress(i, n); await tick(); }
+    }
+    setStatus('Zipping…');
+    const blob = await zip.generateAsync({ type: 'blob' }, m => progress(m.percent, 100));
+    download(blob, `${baseName()}-${stamp()}.zip`);
+    setStatus(`Done: ${n} certificates in a ZIP.`, 'ok');
+  });
+
+  // ---------- Init ----------
+  wireDrop('pdfDrop', 'pdfInput', loadPdf);
+  wireDrop('dataDrop', 'dataInput', loadData);
+  refreshControls();
+  getFontBytes('latin', 600).catch(() => setStatus('The Quicksand font could not be loaded. Check your internet connection.', 'err'));
+  // When embedded in an iframe (e.g. Wix), offer a full-page link in case the host blocks downloads.
+  try { if (window.self !== window.top) { const a = $('popout'); a.href = location.href; a.style.display = 'inline'; } } catch (e) { $('popout').style.display = 'inline'; }
+})();
+</script>
+</body>
+</html>
